@@ -13,7 +13,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 
 # Load and preprocess data
-@st.cache(allow_output_mutation=True)
+@st.cache_data
 def load_and_preprocess_data():
     data = pd.read_csv('Cervical Cancer Risk Classification.csv')
     data.replace('?', np.nan, inplace=True)  # Replace '?' with NaN
@@ -40,7 +40,7 @@ def load_and_preprocess_data():
 
 model, scaler, X_train, X_test, y_train, y_test, data = load_and_preprocess_data()
 
-# Streamlit dashboard layout
+# Streamlit dashboard layout with tabs
 st.title('Cervical Cancer Risk Classification Dashboard')
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["Home", "Data Overview", "Visualizations", "Model Performance", "Predict"])
 
