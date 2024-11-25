@@ -5,96 +5,112 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
 
 # Load and preprocess data
-@st.cache
-def load_data():
-    data = pd.read_csv('/mnt/data/Cervical Cancer Risk Classification.csv')
-    # Handling missing values, replace with median or mode as appropriate
-    for col in data.columns:
-        if data[col].dtype == 'object':
-            data[col] = data[col].fillna(data[col].mode()[0])
-        else:
-            data[col] = data[col].fillna(data[col].median())
-    return data
+@st.cache(allow_output_mutation=True)
+def load_and_preprocess_data():
+    data = pd.read_csv('Cervical Cancer Risk Classification.csv')
+    data.replace('?', np.nan, inplace=True)  # Replace '?' with NaN
+    data.dropna(inplace=True)  # Drop rows with NaN values
+    data = data.astype(float)  # Convert all data to float
 
-data = load_data()
+    # Assuming 'Biopsy' is the target variable
+    X = data.drop('Biopsy', axis=1)
+    y = data['Biopsy'].astype(int)
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Standardize features
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    # Train a Logistic Regression model
+    model = LogisticRegression()
+    model.fit(X_train_scaled, y_train)
 
-# Title and Header
-st.title('Cervical Cancer Risk Analysis')
-st.header('Dataset Overview')
+    return model, scaler, X_train_scaled, X_test_scaled, y_train, y_test, data
 
-# Display data
-if st.checkbox('Show raw data'):
-    st.write(data.head())
+model, scaler, X_train, X_test, y_train, y_test, data = load_and_preprocess_data()
 
-# Display statistics
-st.header('Statistical Summary')
-st.write(data.describe())
+# Streamlit dashboard layout
+st.title('Cervical Cancer Risk Classification Dashboard')
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Home", "Data Overview", "Visualizations", "Model Performance", "Predict"])
 
-# Data Visualization
-st.header('Data Visualization')
-selected_visualization = st.selectbox('Select the visualization:', ['Correlation Heatmap', 'Risk Factor Distributions', 'Biopsy Outcome Count'])
-if selected_visualization == 'Correlation Heatmap':
-    plt.figure(figsize=(10, 6))
-    sns.heatmap(data.corr(), annot=True, fmt=".2f", cmap='coolwarm')
-    st.pyplot(plt)
-elif selected_visualization == 'Risk Factor Distributions':
-    factor = st.selectbox('Select a risk factor to visualize:', data.columns)
-    plt.figure(figsize=(10, 4))
-    sns.histplot(data[factor], kde=True, color='blue')
-    plt.title(f'Distribution of {factor}')
-    st.pyplot(plt)
-elif selected_visualization == 'Biopsy Outcome Count':
-    plt.figure(figsize=(10, 4))
-    sns.countplot(x='Biopsy', data=data)
-    plt.title('Biopsy Outcomes')
-    st.pyplot(plt)
+with tab1:
+    st.header('Welcome to the Cervical Cancer Risk Classification Dashboard')
+    st.write('Navigate through the tabs to explore different sections.')
 
-# Predictive Modeling
-st.header('Predictive Modeling')
+with tab2:
+    st.header('Data Overview')
+    st.write('Basic statistics:')
+    st.write(data.describe())
 
-# Feature Selection and Preprocessing
-feature_cols = data.columns.drop('Biopsy')
-X = data[feature_cols]
-y = data['Biopsy']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+with tab3:
+    st.header('Data Visualizations')
+    
+    st.subheader('Age Distribution')
+    fig, ax = plt.subplots()
+    ax.hist(data['Age'], bins=20, color='blue')
+    st.pyplot(fig)
 
-# Model Training
-model = LogisticRegression()
-model.fit(X_train_scaled, y_train)
-y_pred = model.predict(X_test_scaled)
+    st.subheader('Number of Cases by Diagnosis Result')
+    biopsy_counts = data['Biopsy'].value_counts()
+    fig, ax = plt.subplots()
+    ax.bar(biopsy_counts.index, biopsy_counts.values, color=['green', 'red'])
+    ax.set_xticklabels(['Negative', 'Positive'], rotation=0)
+    st.pyplot(fig)
 
-# Model Evaluation
-st.subheader('Model Evaluation')
-st.text('Classification Report:')
-st.text(classification_report(y_test, y_pred))
+    st.subheader('Correlation Heatmap')
+    corr = data.drop('Biopsy', axis=1).corr()
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(corr, annot=True, fmt=".2f", cmap='coolwarm', ax=ax)
+    st.pyplot(fig)
 
-# User Inputs for Prediction
-st.header('Interactive Risk Prediction')
-user_data = {col: st.number_input(f"Enter {col}", min_value=float(data[col].min()), max_value=float(data[col].max()), value=float(data[col].median())) for col in feature_cols}
-user_data_array = np.array([list(user_data.values())]).astype(float)
-user_data_scaled = scaler.transform(user_data_array)
+with tab4:
+    st.header('Algorithm Performance')
+    
+    # Models for performance comparison
+    models = {
+        'Logistic Regression': LogisticRegression(),
+        'SVM': SVC(),
+        'Random Forest': RandomForestClassifier(),
+        'KNN': KNeighborsClassifier(),
+        'Neural Network': MLPClassifier()
+    }
 
-if st.button('Predict Risk'):
-    prediction = model.predict(user_data_scaled)
-    result = 'High Risk' if prediction[0] == 1 else 'Low Risk'
-    st.subheader(f'Your predicted risk of needing a biopsy: {result}')
+    selected_models = {model: st.checkbox(model, key=model) for model in models.keys()}
+    for model_name, selected in selected_models.items():
+        if selected:
+            st.subheader(f'{model_name} Results')
+            current_model = models[model_name]
+            current_model.fit(X_train, y_train)
+            y_pred = current_model.predict(X_test)
+            st.write('Classification Report:')
+            st.text(classification_report(y_test, y_pred))
+            
+            st.write('Confusion Matrix:')
+            fig, ax = plt.subplots()
+            cm = confusion_matrix(y_test, y_pred, labels=current_model.classes_)
+            sns.heatmap(cm, annot=True, fmt="d", cmap='Blues', ax=ax)
+            st.pyplot(fig)
 
-# Custom CSS for styling
-st.markdown(
-    """
-    <style>
-    .streamlit-expanderHeader { font-size: 16px; font-weight: bold; }
-    .stButton>button { width: 100%; border-radius: 20px; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+with tab5:
+    st.header('Model Predictions')
+    st.write('Input data to predict the risk of cervical cancer.')
+    # Input form for prediction
+    input_data = {feature: st.number_input(f"Enter {feature}", format="%.2f") for feature in data.columns[:-1]}  # Excludes target
+    input_df = pd.DataFrame([input_data])
+    input_scaled = scaler.transform(input_df)  # Scale the input
 
-# Run the app with command: streamlit run app.py
+    if st.button('Predict'):
+        prediction = model.predict(input_scaled)
+        result = 'Positive' if prediction[0] == 1 else 'Negative'
+        st.success(f'The predicted biopsy result is: {result}')
